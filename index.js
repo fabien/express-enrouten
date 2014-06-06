@@ -38,13 +38,16 @@ function mount(app, options) {
 
     return function onmount(parent) {
         var router;
-
+        
         // Remove sacrificial express app and keep a
         // copy of the currently registered items.
         /// XXX: caveat emptor, private member
         parent._router.stack.pop();
         router = registry(app.mountpath);
-
+        router.app = parent;
+        
+        parent.emit('enrouten', router, options);
+        
         // Process the configuration, adding to the stack
         if (typeof options.index === 'string') {
             options.index = resolve(options.basedir, options.index);
@@ -58,6 +61,10 @@ function mount(app, options) {
 
         if (typeof options.routes === 'object') {
             routes(router, options.routes);
+        }
+        
+        if (typeof options.fn === 'function') {
+            options.fn(router);
         }
 
         // Setup app locals for use in handlers.
@@ -114,7 +121,7 @@ function enrouten(options) {
 
     app = express();
     app.once('mount', mount(app, options));
-
+    
     return app;
 }
 
