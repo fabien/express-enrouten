@@ -20,12 +20,12 @@
 var path = require('path');
 var caller = require('caller');
 var express = require('express');
-var reverend = require('reverend');
 var debug = require('debuglog')('enrouten');
 var index = require('./lib/index');
 var routes = require('./lib/routes');
 var registry = require('./lib/registry');
 var directory = require('./lib/directory');
+var path2regexp = require('path-to-regexp');
 
 
 /**
@@ -37,17 +37,22 @@ var directory = require('./lib/directory');
 function mount(app, options) {
 
     return function onmount(parent) {
-        var router;
-        
+        var router,
+            routerOptions;
+
+        // allow inherited options to be passed to created Routers
+        routerOptions = options.routerOptions || {};
+
         // Remove sacrificial express app and keep a
         // copy of the currently registered items.
         /// XXX: caveat emptor, private member
         parent._router.stack.pop();
-        router = registry(app.mountpath);
+
+        router = registry(app.mountpath, null, routerOptions);
         router.app = parent;
         
         parent.emit('enrouten', router, options);
-        
+
         // Process the configuration, adding to the stack
         if (typeof options.index === 'string') {
             options.index = resolve(options.basedir, options.index);
@@ -56,7 +61,7 @@ function mount(app, options) {
 
         if (typeof options.directory === 'string') {
             options.directory = resolve(options.basedir, options.directory);
-            directory(router, options.directory);
+            directory(router, options.directory, routerOptions);
         }
 
         if (typeof options.routes === 'object') {
@@ -76,7 +81,7 @@ function mount(app, options) {
                 var route;
                 route = this.routes[name];
                 if (typeof route === 'string') {
-                    return reverend(route, data || {});
+                    return path2regexp.compile(route)(data);
                 }
                 return undefined;
             }

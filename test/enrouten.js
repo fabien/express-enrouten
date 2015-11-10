@@ -21,13 +21,17 @@ test('enrouten', function (t) {
 
 
 function get(app, route, next) {
-    var server;
-    server = request(app)
+    request(app)
         .get(route)
         .expect('Content-Type', /html/)
-        .expect(200, 'ok', function (err) {
-            server.app.close(next.bind(null, err));
-        });
+        .expect(200, 'ok', next);
+}
+
+
+function getfail(app, route, status, next) {
+    request(app)
+        .get(route)
+        .expect(status, next);
 }
 
 
@@ -39,7 +43,7 @@ function run(test, name, mount, fn) {
         app = express();
         fn(app);
 
-        fn(app, { basedir: path.join(__dirname, 'fixtures') })
+        fn(app, { basedir: path.join(__dirname, 'fixtures') });
         fn(app, { directory: null });
         fn(app, { index: null });
         fn(app, { routes: null });
@@ -106,6 +110,73 @@ function run(test, name, mount, fn) {
         });
 
 
+        t.test('router caseSensitive', function (t) {
+            var app, settings;
+
+            app = express();
+            app.set('case sensitive routing', true);
+            settings = {
+                directory: path.join('fixtures', 'caseSensitive'),
+                routerOptions: {
+                    caseSensitive: true
+                }
+            };
+
+            fn(app, settings);
+
+            get(app, mount + '/caseSensitive', function (err) {
+                t.error(err);
+                getfail(app, mount + '/casesensitive', 404, function (err) {
+                    t.error(err);
+                    get(app, mount + '/lowercase', function (err) {
+                        t.error(err);
+                        getfail(app, mount + '/LOWERCASE', 404, function (err) {
+                            t.error(err);
+                            get(app, mount + '/UPPERCASE', function (err) {
+                                t.error(err);
+                                getfail(app, mount + '/uppercase', 404, function (err) {
+                                    t.error(err);
+                                    t.end();
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+
+
+        t.test('router strict', function (t) {
+            var app, settings;
+
+            app = express();
+            app.set('strict routing', true);
+            settings = {
+                index: path.join('fixtures', 'strict'),
+                routerOptions: {
+                    strict: true
+                }
+            };
+
+            fn(app, settings);
+
+            get(app, mount + '/', function (err) {
+                t.error(err);
+                get(app, mount + '/strict', function (err) {
+                    getfail(app, mount + '/strict/', 404, function (err) {
+                        t.error(err);
+                        get(app, mount + '/very-strict/', function (err) {
+                            getfail(app, mount + '/very-strict', 404, function (err) {
+                                t.error(err);
+                                t.end();
+                            });
+                        });
+                    });
+                });
+            });
+        });
+
+
         t.test('index', function (t) {
             var app, settings;
 
@@ -166,7 +237,7 @@ function run(test, name, mount, fn) {
 
 
         t.test('named', function (t) {
-            var app, settings
+            var app, settings;
 
             app = express();
             settings = {
@@ -206,6 +277,46 @@ function run(test, name, mount, fn) {
             });
 
             t.end();
+        });
+
+
+        t.test('dot directories', function (t) {
+          var app, settings;
+
+          app = express();
+          settings = {
+            directory: path.join('fixtures', 'dotdirectory')
+          };
+
+          fn(app, settings);
+
+          get(app, mount + '/controller', function (err) {
+            t.error(err);
+            t.end();
+          });
+        });
+
+
+        t.test('custom extensions', function (t) {
+          var app, settings;
+
+          require.extensions['.partyscript'] = require.extensions['.js'];
+
+          app = express();
+          settings = {
+            directory: path.join('fixtures', 'customext')
+          };
+
+          fn(app, settings);
+
+          get(app, mount + '/controller', function (err) {
+            t.error(err);
+            get(app, mount + '/partycontroller', function (err) {
+              t.error(err);
+              delete require.extensions['.partyscript'];
+              t.end();
+            });
+          });
         });
 
     });
@@ -270,7 +381,7 @@ function run(test, name, mount, fn) {
 
 
         t.test('named', function (t) {
-            var app, settings
+            var app, settings;
 
             app = express();
             settings = {
@@ -408,15 +519,13 @@ function run(test, name, mount, fn) {
             fn(app, settings);
 
             get(app, mount + '/sub', function (err) {
-                var server;
-
                 t.error(err);
-                server = request(app)
+                request(app)
                     .post(mount)
                     .expect('Content-Type', /html/)
                     .expect(200, 'ok', function (err) {
                         t.error(err);
-                        server.app.close(t.end.bind(t));
+                        t.end();
                     });
             });
         });
@@ -441,8 +550,119 @@ function run(test, name, mount, fn) {
             t.end();
         });
 
-    });
+        t.test('single middleware', function(t) {
+            var app, settings;
 
+            app = express();
+            settings = {
+                routes: [
+                    {
+                        path: '/',
+                        method: 'get',
+                        middleware: [
+                            function(req, res, next) {
+                                res.value = 'middleware';
+                                next();
+                            }
+                        ],
+                        handler: function (req, res) {
+                            res.send(res.value);
+                        }
+                    }
+                ]
+            };
+
+            fn(app, settings);
+
+            request(app)
+                .get(mount)
+                .expect('Content-Type', /html/)
+                .expect(200, 'middleware', function (err) {
+                    t.error(err);
+                    t.end();
+                });
+        });
+
+        t.test('multiple middleware', function(t) {
+            var app, settings;
+
+            app = express();
+            settings = {
+                routes: [
+                    {
+                        path: '/',
+                        method: 'get',
+                        middleware: [
+                            function(req, res, next) {
+                                res.value1 = 1;
+                                next();
+                            },
+                            function(req, res, next) {
+                                res.value2 = 2;
+                                next();
+                            }
+                        ],
+                        handler: function (req, res) {
+                            res.send((res.value1 + res.value2).toString());
+                        }
+                    }
+                ]
+            };
+
+            fn(app, settings);
+
+            request(app)
+                .get(mount)
+                .expect('Content-Type', /html/)
+                .expect(200, (3).toString(), function (err) {
+                    t.error(err);
+                    t.end();
+                });
+        });
+
+        t.test('error thrown in middleware', function(t) {
+            var app, settings;
+
+            app = express();
+            settings = {
+                routes: [
+                    {
+                        path: '/',
+                        method: 'get',
+                        middleware: [
+                            function(req, res, next) {
+                                next(new Error('middleware error'));
+                            },
+                            function(req, res, next) {
+                                res.msg = 'You wont see this';
+                                next();
+                            }
+                        ],
+                        handler: function (req, res) {
+                            res.send(res.msg);
+                        }
+                    }
+                ]
+            };
+
+            fn(app, settings);
+
+            // error handler
+            app.use(function(err, req, res, next) {
+                res.status(503).send(err.message);
+            });
+
+            request(app)
+                .get(mount)
+                .expect('Content-Type', /html/)
+                .expect(503, 'middleware error', function (err) {
+                    t.error(err);
+                    t.end();
+                });
+        });
+
+
+    });
 
     test('path generation', function (t) {
 
@@ -494,6 +714,8 @@ function run(test, name, mount, fn) {
 
             t.end();
         });
+
+        t.test()
 
     });
 
