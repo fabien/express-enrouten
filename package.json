@@ -1,5 +1,5 @@
 {
-  "name": "express-enrouten",
+  "name": "@atelierfabien/express-enrouten",
   "version": "2.0.0-pre",
   "description": "An express route initialization and configuration module.",
   "main": "index.js",
@@ -8,7 +8,7 @@
     "cover": "istanbul cover tape -- test/*.js",
     "lint": "jshint -c .jshintrc index.js lib/*.js"
   },
-  "repository": "git://github.com/krakenjs/express-enrouten.git",
+  "repository": "git://github.com/fabien/express-enrouten.git",
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
   },
