@@ -47,11 +47,12 @@ function mount(app, options) {
         // copy of the currently registered items.
         /// XXX: caveat emptor, private member
         parent._router.stack.pop();
+
         router = registry(app.mountpath, null, routerOptions);
         router.app = parent;
         
         parent.emit('enrouten', router, options);
-        
+
         // Process the configuration, adding to the stack
         if (typeof options.index === 'string') {
             options.index = resolve(options.basedir, options.index);
