@@ -27,6 +27,52 @@ var registry = require('./lib/registry');
 var directory = require('./lib/directory');
 var path2regexp = require('path-to-regexp');
 
+function build(mountpath, parent, options, _wrapped) {
+   options = options || {};
+   var routerOptions = options.routerOptions || {};
+   var router = registry(mountpath, null, routerOptions);
+   router.app = parent;
+   
+   parent.emit('enrouten', router, options);
+
+   // Process the configuration, adding to the stack
+   if (typeof options.index === 'string') {
+       options.index = resolve(options.basedir, options.index);
+       index(router, options.index);
+   }
+
+   if (typeof options.directory === 'string') {
+       options.directory = resolve(options.basedir, options.directory);
+       directory(router, options.directory, routerOptions);
+   }
+
+   if (typeof options.routes === 'object') {
+       routes(router, options.routes);
+   }
+   
+   if (typeof options.fn === 'function') {
+       options.fn(router);
+   }
+
+   // Setup app locals for use in handlers.
+   parent.locals = parent.locals || {};
+   parent.locals.enrouten = {
+
+       routes: router.routes,
+
+       path: function path(name, data) {
+           var route;
+           route = this.routes[name];
+           if (typeof route === 'string') {
+               return path2regexp.compile(route)(data);
+           }
+           return undefined;
+       }
+
+   };
+   
+   return _wrapped ? router : router._router;
+}
 
 /**
  * Creates the onmount handler used to process teh middelwarez
@@ -37,64 +83,19 @@ var path2regexp = require('path-to-regexp');
 function mount(app, options) {
 
     return function onmount(parent) {
-        var router,
-            routerOptions;
-
-        // allow inherited options to be passed to created Routers
-        routerOptions = options.routerOptions || {};
-
         // Remove sacrificial express app and keep a
         // copy of the currently registered items.
         /// XXX: caveat emptor, private member
         parent._router.stack.pop();
 
-        router = registry(app.mountpath, null, routerOptions);
-        router.app = parent;
+        var router = build(app.mountpath, parent, options, true);
         
-        parent.emit('enrouten', router, options);
-
-        // Process the configuration, adding to the stack
-        if (typeof options.index === 'string') {
-            options.index = resolve(options.basedir, options.index);
-            index(router, options.index);
-        }
-
-        if (typeof options.directory === 'string') {
-            options.directory = resolve(options.basedir, options.directory);
-            directory(router, options.directory, routerOptions);
-        }
-
-        if (typeof options.routes === 'object') {
-            routes(router, options.routes);
-        }
-        
-        if (typeof options.fn === 'function') {
-            options.fn(router);
-        }
-
-        // Setup app locals for use in handlers.
-        parent.locals.enrouten = {
-
-            routes: router.routes,
-
-            path: function path(name, data) {
-                var route;
-                route = this.routes[name];
-                if (typeof route === 'string') {
-                    return path2regexp.compile(route)(data);
-                }
-                return undefined;
-            }
-
-        };
-
         debug('mounting routes at', app.mountpath);
         debug(router.routes);
         parent.use(app.mountpath, router._router);
     };
 
 }
-
 
 /**
  * Resolves the provide basedir and file, returning
@@ -130,6 +131,7 @@ function enrouten(options) {
     return app;
 }
 
+enrouten.build = build;
 
 /**
  * Create a URL from a named route and data.
@@ -144,7 +146,6 @@ enrouten.path = function path(app, name, data) {
         return locals.enrouten.path(name, data);
     }
     return undefined;
-};
-
+}
 
 module.exports = enrouten;
